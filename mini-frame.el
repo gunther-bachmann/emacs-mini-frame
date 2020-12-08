@@ -194,6 +194,7 @@ This function used as value for `resize-mini-frames' variable."
            (when (eq mini-frame-resize 'grow-only)
              (frame-parameter frame 'height))
            nil nil 'vertically)
+  (message "") ;; make sure something is put into the echo area, this will prevent the frame to be moved to the top!
   (when (and (frame-live-p mini-frame-completions-frame)
              (frame-visible-p mini-frame-completions-frame))
     (let ((show-parameters (if (functionp mini-frame-completions-show-parameters)
@@ -266,6 +267,26 @@ ALIST is passed to `window--display-buffer'."
       (prog1 (window--display-buffer buffer w 'frame alist)
         (set-window-dedicated-p w 'soft)))))
 
+(defun mini-frame--process-show-parameters (show-parameters frame)
+  "process show parameters relative to the given frame"
+  (--map (cond
+          ((and (eq 'width (car it))
+              (floatp (cdr it)))
+           `(width . ,(floor (* (cdr it) (frame-width frame)))))
+          ((and (eq 'height (car it))
+              (floatp (cdr it)))
+           `(height . ,(floor (* (cdr it) (frame-height frame)))))
+          ((and (eq 'left (car it))
+              (floatp (cdr it)))
+           `(left . 0))
+          ((and (eq 'top (car it))
+              (floatp (cdr it)))
+           `(top . 0))
+          (t it))
+         show-parameters))
+
+(mini-frame--process-show-parameters '((width . 1.0)) (selected-frame))
+
 (defun mini-frame--display (fn args)
   "Show mini-frame and call FN with ARGS."
   (let* ((selected-frame (selected-frame))
@@ -274,10 +295,11 @@ ALIST is passed to `window--display-buffer'."
                                        (list mini-frame-frame
                                              mini-frame-completions-frame)))
          (dd default-directory)
-         (parent-frame-parameters `((parent-frame . ,selected-frame)))
-         (show-parameters (if (functionp mini-frame-show-parameters)
+         (parent-frame-parameters `((parent-frame)))
+         (show-parameters-original (if (functionp mini-frame-show-parameters)
                               (funcall mini-frame-show-parameters)
                             mini-frame-show-parameters))
+         (show-parameters (mini-frame--process-show-parameters show-parameters-original selected-frame))
          (show-parameters (append (unless (alist-get 'background-color show-parameters)
                                     `((background-color . ,(funcall mini-frame-background-color-function))))
                                   show-parameters)))
@@ -293,6 +315,8 @@ ALIST is passed to `window--display-buffer'."
                                             parent-frame-parameters
                                             show-parameters))))
     (modify-frame-parameters mini-frame-frame show-parameters)
+    (modify-frame-parameters mini-frame-frame (mini-frame--get-adjusted-position mini-frame-frame selected-frame show-parameters-original))
+
     (when (and (frame-live-p mini-frame-completions-frame)
                (frame-visible-p mini-frame-completions-frame))
       (make-frame-invisible mini-frame-completions-frame))
@@ -300,6 +324,29 @@ ALIST is passed to `window--display-buffer'."
     (select-frame-set-input-focus mini-frame-frame)
     (setq default-directory dd)
     (apply fn args)))
+
+(defun mini-frame--get-adjusted-position (frame selected-frame show-parameters-original)
+    "Adjust the position of FRAME depending on the targeted SELECTED-FRAME given the SHOW-PARAMETERS-ORIGINAL with possibly float parameters that need recalculation
+
+Since the miniframe may be displayed on a frame that is not its parent, two things need to be done
+1. an offset needs to be added, if the target frame has an offset (e.g. in multi monitor envs)
+2. the floating point values of left, top, width and height need to adjusted according to the (new) target frame"
+    (let* ((cx (car (frame-position frame)))
+           (cy (cdr (frame-position frame)))
+           (xoffset (car (frame-position selected-frame)))
+           (yoffset (cdr (frame-position selected-frame)))
+           (dx 0)
+           (dy 0))
+      (when-let ((left (--find (and (eq 'left (car it))
+                                  (floatp (cdr it)))
+                               show-parameters-original)))
+        (setq dx (* (default-font-width) (floor (* (cdr left) (- (frame-width selected-frame) (frame-width frame)))))))
+      (when-let ((top (--find (and (eq 'top (car it))
+                                 (floatp (cdr it)))
+                              show-parameters-original)))
+        (setq dy (* (default-font-height) (floor (* (cdr top) (- (frame-height selected-frame) (frame-height frame)))))))
+      `((left . ,(+ cx xoffset dx)) (top . ,(+ cy yoffset dy)))
+      ))
 
 (defun mini-frame--minibuffer-selected-window (fn &rest args)
   "Call FN with ARGS.  Return window selected just before mini-frame window was selected."
