@@ -285,7 +285,21 @@ ALIST is passed to `window--display-buffer'."
           (t it))
          show-parameters))
 
-(mini-frame--process-show-parameters '((width . 1.0)) (selected-frame))
+(defvar mini-frame--command-adjusted-show-parameters
+  '()
+  "list of commands and replacement tuples for show parameters to be used for that command
+
+e.g '((my-command (width . 0.8))
+      (other-command (top . 0.1) (width . 0.2)))")
+
+(defun mini-frame--adjust-show-parameters-on-command (command show-parameters)
+  "adjust frame parameter command specific"
+  (if-let ((adjustments (--find (equal command (car it)) mini-frame--command-adjusted-show-parameters)))
+      (--map (if-let ((cell (-find (lambda (adjustment) (eq (car it) (car adjustment))) (cdr adjustments))))
+                 cell
+               it)
+             show-parameters)
+    show-parameters))
 
 (defun mini-frame--display (fn args)
   "Show mini-frame and call FN with ARGS."
@@ -299,7 +313,8 @@ ALIST is passed to `window--display-buffer'."
          (show-parameters-original (if (functionp mini-frame-show-parameters)
                               (funcall mini-frame-show-parameters)
                             mini-frame-show-parameters))
-         (show-parameters (mini-frame--process-show-parameters show-parameters-original selected-frame))
+         (show-parameters-adjusted (mini-frame--adjust-show-parameters-on-command this-command show-parameters-original))
+         (show-parameters (mini-frame--process-show-parameters show-parameters-adjusted selected-frame))
          (show-parameters (append (unless (alist-get 'background-color show-parameters)
                                     `((background-color . ,(funcall mini-frame-background-color-function))))
                                   show-parameters)))
