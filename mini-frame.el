@@ -294,6 +294,8 @@ e.g '((my-command (width . 0.8))
 
 (defun mini-frame--adjust-show-parameters-on-command (command show-parameters)
   "adjust frame parameter command specific"
+  (let ((inhibit-message t)) ;; write message to buffer, not to echo area
+    (message (format  "mini-frame adjust parameter 'this command': %s" (symbol-name command))))
   (if-let ((adjustments (--find (equal command (car it)) mini-frame--command-adjusted-show-parameters)))
       (--map (if-let ((cell (-find (lambda (adjustment) (eq (car it) (car adjustment))) (cdr adjustments))))
                  cell
