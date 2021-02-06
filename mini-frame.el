@@ -303,6 +303,17 @@ e.g '((my-command (width . 0.8))
              show-parameters)
     show-parameters))
 
+(defvar mini-frame--recapture-focus-timer nil "timer running to recapture focus in minibuffer (if lost)")
+
+(defun mini-frame--recapture-focus ()
+  "let minibuffer recapture focus"
+  (if (and (frame-live-p mini-frame-frame)
+           (frame-visible-p mini-frame-frame))
+      (x-focus-frame mini-frame-frame)
+    (when mini-frame--recapture-focus-timer
+      (cancel-timer mini-frame--recapture-focus-timer)
+      (setq mini-frame--recapture-focus-timer nil))))
+
 (defun mini-frame--display (fn args)
   "Show mini-frame and call FN with ARGS."
   (let* ((selected-frame (selected-frame))
@@ -338,6 +349,7 @@ e.g '((my-command (width . 0.8))
                (frame-visible-p mini-frame-completions-frame))
       (make-frame-invisible mini-frame-completions-frame))
     (make-frame-visible mini-frame-frame)
+    (setq mini-frame--recapture-focus-timer (run-at-time nil 0.2 #'mini-frame--recapture-focus))
     (select-frame-set-input-focus mini-frame-frame)
     (setq default-directory dd)
     (apply fn args)))
