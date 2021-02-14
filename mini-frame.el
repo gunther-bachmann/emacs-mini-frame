@@ -316,43 +316,47 @@ e.g '((my-command (width . 0.8))
 
 (defun mini-frame--display (fn args)
   "Show mini-frame and call FN with ARGS."
-  (let* ((selected-frame (selected-frame))
-         (selected-window (selected-window))
-         (selected-is-mini-frame (memq selected-frame
-                                       (list mini-frame-frame
-                                             mini-frame-completions-frame)))
-         (dd default-directory)
-         (parent-frame-parameters `((parent-frame)))
-         (show-parameters-original (if (functionp mini-frame-show-parameters)
-                              (funcall mini-frame-show-parameters)
-                            mini-frame-show-parameters))
-         (show-parameters-adjusted (mini-frame--adjust-show-parameters-on-command this-command show-parameters-original))
-         (show-parameters (mini-frame--process-show-parameters show-parameters-adjusted selected-frame))
-         (show-parameters (append (unless (alist-get 'background-color show-parameters)
-                                    `((background-color . ,(funcall mini-frame-background-color-function))))
-                                  show-parameters)))
-    (if (frame-live-p mini-frame-frame)
-        (unless selected-is-mini-frame
-          (setq mini-frame-selected-frame selected-frame)
-          (setq mini-frame-selected-window selected-window)
-          (modify-frame-parameters mini-frame-frame parent-frame-parameters))
-      (setq mini-frame-selected-frame selected-frame)
-      (setq mini-frame-selected-window selected-window)
-      (setq mini-frame-frame
-            (mini-frame--make-frame (append '((minibuffer . only))
-                                            parent-frame-parameters
-                                            show-parameters))))
-    (modify-frame-parameters mini-frame-frame show-parameters)
-    (modify-frame-parameters mini-frame-frame (mini-frame--get-adjusted-position mini-frame-frame selected-frame show-parameters-original))
+  (let ((was-read-only (or buffer-read-only -1)))
+    (read-only-mode 1)
+    (let* ((selected-frame (selected-frame))
+           (selected-window (selected-window))
+           (selected-is-mini-frame (memq selected-frame
+                                         (list mini-frame-frame
+                                               mini-frame-completions-frame)))
+           (dd default-directory)
+           (parent-frame-parameters `((parent-frame)))
+           (show-parameters-original (if (functionp mini-frame-show-parameters)
+                                         (funcall mini-frame-show-parameters)
+                                       mini-frame-show-parameters))
+           (show-parameters-adjusted (mini-frame--adjust-show-parameters-on-command this-command show-parameters-original))
+           (show-parameters (mini-frame--process-show-parameters show-parameters-adjusted selected-frame))
+           (show-parameters (append (unless (alist-get 'background-color show-parameters)
+                                      `((background-color . ,(funcall mini-frame-background-color-function))))
+                                    show-parameters)))
+      (if (frame-live-p mini-frame-frame)
+          (unless selected-is-mini-frame
+            (setq mini-frame-selected-frame selected-frame)
+            (setq mini-frame-selected-window selected-window)
+            (modify-frame-parameters mini-frame-frame parent-frame-parameters))
+        (setq mini-frame-selected-frame selected-frame)
+        (setq mini-frame-selected-window selected-window)
+        (setq mini-frame-frame
+              (mini-frame--make-frame (append '((minibuffer . only))
+                                              parent-frame-parameters
+                                              show-parameters))))
+      (modify-frame-parameters mini-frame-frame show-parameters)
+      (modify-frame-parameters mini-frame-frame (mini-frame--get-adjusted-position mini-frame-frame selected-frame show-parameters-original))
 
-    (when (and (frame-live-p mini-frame-completions-frame)
+      (when (and (frame-live-p mini-frame-completions-frame)
                (frame-visible-p mini-frame-completions-frame))
-      (make-frame-invisible mini-frame-completions-frame))
-    (make-frame-visible mini-frame-frame)
-    (setq mini-frame--recapture-focus-timer (run-at-time nil 0.2 #'mini-frame--recapture-focus))
-    (select-frame-set-input-focus mini-frame-frame)
-    (setq default-directory dd)
-    (apply fn args)))
+        (make-frame-invisible mini-frame-completions-frame))
+      (make-frame-visible mini-frame-frame)
+      (unless mini-frame--recapture-focus-timer
+        (setq mini-frame--recapture-focus-timer (run-at-time nil 0.2 #'mini-frame--recapture-focus)))
+      (read-only-mode was-read-only)
+      (select-frame-set-input-focus mini-frame-frame)
+      (setq default-directory dd)
+      (apply fn args))))
 
 (defun mini-frame--get-adjusted-position (frame selected-frame show-parameters-original)
     "Adjust the position of FRAME depending on the targeted SELECTED-FRAME given the SHOW-PARAMETERS-ORIGINAL with possibly float parameters that need recalculation
